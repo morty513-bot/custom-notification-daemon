@@ -99,6 +99,6 @@ If built package contains a wrong launcher path:
 - [ ] Investigate nixpkgs/Home Manager packaging for install/manage flow (may be too complex for current project scope).
 - [ ] Add multiple renderer display modes and config-file selection between renderers.
 - [x] Improve command-line interface baseline: Click-based CLI with run/version/service helpers.
-- [ ] Add GitHub Actions workflow to build `.deb` package artifacts on push/release.
+- [x] Add GitHub Actions workflow to build `.deb` package artifacts on push/release.
 - [ ] Improve visual design to be nicer and more colorful (better spacing, typography, accent colors).
 - [ ] Tie visual styling to urgency levels (for example: subtle normal, highlighted critical).

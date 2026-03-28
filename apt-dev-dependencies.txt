@@ -2,3 +2,4 @@ dpkg-dev
 debhelper
 dh-python
 build-essential
+fakeroot

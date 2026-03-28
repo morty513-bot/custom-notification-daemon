@@ -1,0 +1,33 @@
+name: Build Debian Package
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo xargs -a apt-dev-dependencies.txt apt-get install -y
+
+      - name: Build Debian package
+        run: |
+          bash ./scripts/build-deb.sh
+
+      - name: Upload .deb artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-notification-daemon-deb
+          path: build-artifacts/*.deb
+          if-no-files-found: error
