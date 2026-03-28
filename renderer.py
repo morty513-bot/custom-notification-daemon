@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+import sys
 import threading
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 
 from notifications import (
+    CLOSE_REASON_DISMISSED,
+    CLOSE_REASON_EXPIRED,
     Notification,
 )
 
@@ -30,205 +33,68 @@ class NotificationRenderer(ABC):
         pass
 
 
-# Below was the old version but this makes a window handled by sway but I don't want this,
-# I want an overlay like a banner or a toast or something
-# class GtkRenderer(NotificationRenderer):
-#     """Simple GTK3 popup renderer for Wayland / Sway.
-
-#     Each notification gets its own small undecorated window. Windows
-#     auto-dismiss after the requested timeout (or 5 s by default). Sway
-#     will float these automatically because they carry the NOTIFICATION
-#     window-type hint.
-#     """
-
-#     _DEFAULT_TIMEOUT_MS = 5000
-
-#     def __init__(self) -> None:
-#         import gi
-
-#         gi.require_version("Gtk", "3.0")
-#         from gi.repository import Gtk, Gdk, GLib
-
-#         self._Gtk = Gtk
-#         self._Gdk = Gdk
-#         self._GLib = GLib
-
-#         self._windows: dict[int, Any] = {}
-#         self._lock = threading.Lock()
-#         self._on_action: Callable[[int, str], None] = lambda _id, _key: None
-#         self._on_closed: Callable[[int, int], None] = lambda _id, _reason: None
-
-#         gtk_thread = threading.Thread(target=Gtk.main, daemon=True)
-#         gtk_thread.start()
-
-#     # ------------------------------------------------------------------ #
-#     # Public API                                                           #
-#     # ------------------------------------------------------------------ #
-
-#     def show(self, notification: Notification) -> None:
-#         self._GLib.idle_add(self._create_window, notification)
-
-#     def close(self, notification_id: int) -> None:
-#         # Programmatic close should not look like a user-dismiss close event.
-#         self._GLib.idle_add(
-#             self._destroy_window,
-#             notification_id,
-#             False,
-#             CLOSE_REASON_DISMISSED,
-#         )
-
-#     def set_handlers(
-#         self,
-#         on_action: Callable[[int, str], None],
-#         on_closed: Callable[[int, int], None],
-#     ) -> None:
-#         self._on_action = on_action
-#         self._on_closed = on_closed
-
-#     # ------------------------------------------------------------------ #
-#     # GTK-thread helpers — must only be called via GLib.idle_add          #
-#     # ------------------------------------------------------------------ #
-
-#     def _create_window(self, notification: Notification) -> bool:
-#         Gtk, Gdk, GLib = self._Gtk, self._Gdk, self._GLib
-
-#         # Replace window if this updates an existing notification
-#         if notification.replaces_id:
-#             self._destroy_window(notification.replaces_id)
-
-#         win = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-#         win.set_decorated(False)
-#         win.set_resizable(False)
-#         win.set_keep_above(True)
-#         win.set_skip_taskbar_hint(True)
-#         win.set_skip_pager_hint(True)
-#         win.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
-#         win.set_default_size(320, -1)
-
-#         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-#         outer.set_margin_top(12)
-#         outer.set_margin_bottom(12)
-#         outer.set_margin_start(16)
-#         outer.set_margin_end(16)
-
-#         if notification.app_name:
-#             app_lbl = Gtk.Label(label=notification.app_name)
-#             app_lbl.set_xalign(0.0)
-#             app_lbl.get_style_context().add_class("dim-label")
-#             outer.pack_start(app_lbl, False, False, 0)
-
-#         if notification.summary:
-#             summary_lbl = Gtk.Label()
-#             summary_lbl.set_markup(
-#                 f"<b>{GLib.markup_escape_text(notification.summary)}</b>"
-#             )
-#             summary_lbl.set_xalign(0.0)
-#             summary_lbl.set_line_wrap(True)
-#             summary_lbl.set_max_width_chars(40)
-#             outer.pack_start(summary_lbl, False, False, 0)
-
-#         if notification.body:
-#             body_lbl = Gtk.Label(label=notification.body)
-#             body_lbl.set_xalign(0.0)
-#             body_lbl.set_line_wrap(True)
-#             body_lbl.set_max_width_chars(40)
-#             outer.pack_start(body_lbl, False, False, 0)
-
-#         action_pairs = self._parse_actions(notification.actions)
-#         if action_pairs:
-#             action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-#             for action_key, action_label in action_pairs:
-#                 btn = Gtk.Button(label=action_label)
-#                 btn.connect(
-#                     "clicked",
-#                     self._on_action_clicked,
-#                     notification.id,
-#                     action_key,
-#                 )
-#                 action_row.pack_start(btn, False, False, 0)
-#             outer.pack_start(action_row, False, False, 2)
-
-#         win.add(outer)
-#         win.show_all()
-
-#         with self._lock:
-#             self._windows[notification.id] = win
-
-#         timeout_ms = (
-#             notification.expire_timeout
-#             if notification.expire_timeout > 0
-#             else self._DEFAULT_TIMEOUT_MS
-#         )
-#         GLib.timeout_add(
-#             timeout_ms,
-#             self._destroy_window,
-#             notification.id,
-#             True,
-#             CLOSE_REASON_EXPIRED,
-#         )
-
-#         return False  # don't repeat idle call
-
-#     def _on_action_clicked(
-#         self, _button: object, notification_id: int, action_key: str
-#     ) -> None:
-#         self._on_action(notification_id, action_key)
-#         self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-
-#     def _destroy_window(
-#         self,
-#         notification_id: int,
-#         emit_closed: bool = False,
-#         close_reason: int = 0,
-#     ) -> bool:
-#         with self._lock:
-#             win = self._windows.pop(notification_id, None)
-#         if win is not None:
-#             win.destroy()
-#             if emit_closed:
-#                 self._on_closed(notification_id, close_reason)
-#         return False  # don't repeat timeout/idle call
-
-#     @staticmethod
-#     def _parse_actions(actions: list[str]) -> list[tuple[str, str]]:
-#         pairs: list[tuple[str, str]] = []
-#         for i in range(0, len(actions) - 1, 2):
-#             action_key = actions[i]
-#             action_label = actions[i + 1]
-#             pairs.append((action_key, action_label))
-#         return pairs
-
-
 class OverlayRenderer(NotificationRenderer):
-    """Renderer that renders notifications as simple overlays on top of all windows.
-    
-    Uses GTK with GtkLayerShell to create layer surfaces on Wayland/Sway,
-    similar to how dunst works. Notifications appear as a banner at the top
-    of the screen and are not managed by the window manager.
+    """Renderer that displays notifications in a top-right toast.
+
+    Prefers layer-shell integration when available, but can fall back to a
+    normal GTK window so startup does not fail on systems without
+    GtkLayerShell/Gtk4LayerShell.
     """
 
     _DEFAULT_TIMEOUT_MS = 5000
-    _BANNER_HEIGHT = 120
+    _TOAST_HEIGHT = 120
+    _TOAST_WIDTH = 420
+    _TOAST_MARGIN = 12
 
     def __init__(self) -> None:
         import gi
 
-        gi.require_version("Gtk", "3.0")
+        gtk_major = 3
+        try:
+            gi.require_version("Gtk", "3.0")
+        except ValueError:
+            gi.require_version("Gtk", "4.0")
+            gtk_major = 4
+
         from gi.repository import Gtk, Gdk, GLib
 
-        try:
-            gi.require_version("GtkLayerShell", "0")
-            from gi.repository import GtkLayerShell
-        except ValueError:
-            raise RuntimeError(
-                "GtkLayerShell not found. Install it with: "
-                "sudo apt install libgtk-layer-shell0 gir1.2-gtk-layer-shell-0"
-            )
+        layer_shell = None
+        if gtk_major == 3:
+            for version in ("0.1", "0"):
+                try:
+                    gi.require_version("GtkLayerShell", version)
+                    from gi.repository import GtkLayerShell
+
+                    layer_shell = GtkLayerShell
+                    break
+                except ValueError:
+                    continue
+        else:
+            for version in ("1.0", "0"):
+                try:
+                    gi.require_version("Gtk4LayerShell", version)
+                    from gi.repository import Gtk4LayerShell
+
+                    layer_shell = Gtk4LayerShell
+                    break
+                except ValueError:
+                    continue
 
         self._Gtk = Gtk
         self._Gdk = Gdk
         self._GLib = GLib
-        self._GtkLayerShell = GtkLayerShell
+        self._gtk_major = gtk_major
+        self._GtkLayerShell = layer_shell
+        self._main_loop = None
+
+        if self._GtkLayerShell is None:
+            print(
+                "[custom-notification-daemon] Running without GtkLayerShell. "
+                "Notifications will be regular windows. "
+                "Install: gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 "
+                "libgtk-layer-shell0",
+                file=sys.stderr,
+            )
 
         self._windows: dict[int, Any] = {}
         self._lock = threading.Lock()
@@ -236,7 +102,11 @@ class OverlayRenderer(NotificationRenderer):
         self._on_closed: Callable[[int, int], None] = lambda _id, _reason: None
         self._timeout_sources: dict[int, int] = {}
 
-        gtk_thread = threading.Thread(target=Gtk.main, daemon=True)
+        if self._gtk_major == 3:
+            gtk_thread = threading.Thread(target=Gtk.main, daemon=True)
+        else:
+            self._main_loop = GLib.MainLoop()
+            gtk_thread = threading.Thread(target=self._main_loop.run, daemon=True)
         gtk_thread.start()
 
     # ------------------------------------------------------------------ #
@@ -252,7 +122,7 @@ class OverlayRenderer(NotificationRenderer):
             self._destroy_window,
             notification_id,
             True,
-            2,  # CLOSE_REASON_DISMISSED
+            CLOSE_REASON_DISMISSED,
         )
 
     def set_handlers(
@@ -276,28 +146,65 @@ class OverlayRenderer(NotificationRenderer):
             self._destroy_window(notification.replaces_id, False, 0)
 
         # Create window
-        win = Gtk.Window(type=Gtk.WindowType.POPUP)
+        if self._gtk_major == 3:
+            win = Gtk.Window(type=Gtk.WindowType.POPUP)
+        else:
+            win = Gtk.Window()
+
         win.set_decorated(False)
         win.set_resizable(False)
-        win.set_keep_above(True)
-        win.set_skip_taskbar_hint(True)
-        win.set_skip_pager_hint(True)
+        if hasattr(win, "set_keep_above"):
+            win.set_keep_above(True)
+        if hasattr(win, "set_accept_focus"):
+            win.set_accept_focus(False)
+        if hasattr(win, "set_focus_on_map"):
+            win.set_focus_on_map(False)
+        if hasattr(win, "set_can_focus"):
+            win.set_can_focus(False)
+        if hasattr(win, "set_focusable"):
+            win.set_focusable(False)
+        if hasattr(win, "set_skip_taskbar_hint"):
+            win.set_skip_taskbar_hint(True)
+        if hasattr(win, "set_skip_pager_hint"):
+            win.set_skip_pager_hint(True)
+        if self._gtk_major == 3 and hasattr(Gdk, "WindowTypeHint"):
+            win.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
 
-        # Configure as layer shell surface
-        GtkLayerShell.init_for_window(win)
-        GtkLayerShell.set_layer(
-            win, GtkLayerShell.Layer.TOP
-        )  # Layer.TOP to appear above other windows
-        GtkLayerShell.set_monitor(win, Gdk.Display.get_default().get_primary_monitor())
+        if GtkLayerShell is not None:
+            # Configure as layer-shell surface when bindings are available.
+            GtkLayerShell.init_for_window(win)
+            GtkLayerShell.set_layer(win, GtkLayerShell.Layer.TOP)
+            monitor = self._get_primary_monitor(Gdk)
+            if monitor is not None:
+                GtkLayerShell.set_monitor(win, monitor)
 
-        # Position at top of screen
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, True)
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, True)
-        GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, True)
+            # Position as a toast in the top-right corner.
+            GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, True)
+            GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, False)
+            GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, True)
+            if hasattr(GtkLayerShell, "set_margin"):
+                GtkLayerShell.set_margin(
+                    win, GtkLayerShell.Edge.TOP, self._TOAST_MARGIN
+                )
+                GtkLayerShell.set_margin(
+                    win, GtkLayerShell.Edge.RIGHT, self._TOAST_MARGIN
+                )
+
+            # Avoid taking keyboard focus like dunst.
+            if hasattr(GtkLayerShell, "set_keyboard_mode") and hasattr(
+                GtkLayerShell, "KeyboardMode"
+            ):
+                GtkLayerShell.set_keyboard_mode(
+                    win,
+                    GtkLayerShell.KeyboardMode.NONE,
+                )
 
         # Set size
-        win.set_default_size(800, self._BANNER_HEIGHT)
-        GtkLayerShell.set_exclusive_zone(win, self._BANNER_HEIGHT)
+        win.set_default_size(self._TOAST_WIDTH, self._TOAST_HEIGHT)
+        if GtkLayerShell is not None:
+            # A zero exclusive-zone draws over existing windows instead of
+            # reserving workspace space from the compositor.
+            GtkLayerShell.set_exclusive_zone(win, 0)
 
         # Build UI
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -310,7 +217,7 @@ class OverlayRenderer(NotificationRenderer):
             app_lbl = Gtk.Label(label=notification.app_name)
             app_lbl.set_xalign(0.0)
             app_lbl.get_style_context().add_class("dim-label")
-            outer.pack_start(app_lbl, False, False, 0)
+            self._box_add(outer, app_lbl)
 
         if notification.summary:
             summary_lbl = Gtk.Label()
@@ -318,16 +225,16 @@ class OverlayRenderer(NotificationRenderer):
                 f"<b>{GLib.markup_escape_text(notification.summary)}</b>"
             )
             summary_lbl.set_xalign(0.0)
-            summary_lbl.set_line_wrap(True)
+            self._set_label_wrap(summary_lbl, True)
             summary_lbl.set_max_width_chars(60)
-            outer.pack_start(summary_lbl, False, False, 0)
+            self._box_add(outer, summary_lbl)
 
         if notification.body:
             body_lbl = Gtk.Label(label=notification.body)
             body_lbl.set_xalign(0.0)
-            body_lbl.set_line_wrap(True)
+            self._set_label_wrap(body_lbl, True)
             body_lbl.set_max_width_chars(60)
-            outer.pack_start(body_lbl, False, False, 0)
+            self._box_add(outer, body_lbl)
 
         action_pairs = self._parse_actions(notification.actions)
         if action_pairs:
@@ -340,11 +247,15 @@ class OverlayRenderer(NotificationRenderer):
                     notification.id,
                     action_key,
                 )
-                action_row.pack_start(btn, False, False, 0)
-            outer.pack_start(action_row, False, False, 2)
+                self._box_add(action_row, btn)
+            self._box_add(outer, action_row)
 
-        win.add(outer)
-        win.show_all()
+        if self._gtk_major == 3:
+            win.add(outer)
+            win.show_all()
+        else:
+            win.set_child(outer)
+            win.present()
 
         with self._lock:
             self._windows[notification.id] = win
@@ -360,7 +271,7 @@ class OverlayRenderer(NotificationRenderer):
             self._destroy_window,
             notification.id,
             True,
-            1,  # CLOSE_REASON_EXPIRED
+            CLOSE_REASON_EXPIRED,
         )
         self._timeout_sources[notification.id] = timeout_source
 
@@ -370,7 +281,7 @@ class OverlayRenderer(NotificationRenderer):
         self, _button: object, notification_id: int, action_key: str
     ) -> None:
         self._on_action(notification_id, action_key)
-        self._destroy_window(notification_id, True, 2)  # CLOSE_REASON_DISMISSED
+        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
 
     def _destroy_window(
         self,
@@ -401,3 +312,32 @@ class OverlayRenderer(NotificationRenderer):
             action_label = actions[i + 1]
             pairs.append((action_key, action_label))
         return pairs
+
+    def _box_add(self, box: Any, child: Any) -> None:
+        if self._gtk_major == 3:
+            box.pack_start(child, False, False, 0)
+        else:
+            box.append(child)
+
+    def _set_label_wrap(self, label: Any, enabled: bool) -> None:
+        if self._gtk_major == 3:
+            label.set_line_wrap(enabled)
+        else:
+            label.set_wrap(enabled)
+
+    def _get_primary_monitor(self, gdk_module: Any) -> Any:
+        display = gdk_module.Display.get_default()
+        if display is None:
+            return None
+
+        if hasattr(display, "get_primary_monitor"):
+            monitor = display.get_primary_monitor()
+            if monitor is not None:
+                return monitor
+
+        if hasattr(display, "get_monitors"):
+            monitors = display.get_monitors()
+            if monitors and monitors.get_n_items() > 0:
+                return monitors.get_item(0)
+
+        return None

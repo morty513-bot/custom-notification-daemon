@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     t_str_array = list[str]
     t_dict_str_variant = dict[str, Variant]
     t_str4 = list[str]
-    t_uint32_str2 = tuple[int, str]
-    t_uint32_2 = tuple[int, int]
+    t_uint32_str2 = list[int | str]
+    t_uint32_2 = list[int]
     t_none: typing.TypeAlias = None
 else:
     t_str = "s"
@@ -113,11 +113,11 @@ class _DBusInterface(ServiceInterface):
 
     @signal()
     def ActionInvoked(self, id: t_uint32, action_key: t_str) -> t_uint32_str2:
-        return (id, action_key)
+        return [id, action_key]
 
     @signal()
     def NotificationClosed(self, id: t_uint32, reason: t_uint32) -> t_uint32_2:
-        return (id, reason)
+        return [id, reason]
 
     def _emit_action_invoked(self, notification_id: int, action_key: str) -> None:
         self.ActionInvoked(notification_id, action_key)

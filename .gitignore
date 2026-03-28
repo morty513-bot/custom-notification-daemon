@@ -215,7 +215,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Nix
-result
-result-*
-.direnv/
+# Local dev stuff
+.setup-venv
