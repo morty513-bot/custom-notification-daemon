@@ -42,6 +42,7 @@ def _build_renderer(renderer_name: str) -> NotificationRenderer:
 
 
 def _run_daemon_with_renderer(renderer_name: str) -> None:
+    click.echo(f"Starting custom-notification-daemon (renderer={renderer_name})")
     renderer = _build_renderer(renderer_name)
     asyncio.run(run_daemon(RendererNotificationDaemon(renderer)))
 
