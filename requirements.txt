@@ -1,0 +1,4 @@
+black>=26.0.0
+dbus-next==0.2.3
+pytest>=9.0.0
+ruff>=0.15.0
