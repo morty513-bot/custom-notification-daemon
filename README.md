@@ -47,6 +47,23 @@ Then the Python requirements can be installed with the `requirements.txt` file,
 pip install -r requirements.txt
 ```
 
+## CLI usage
+
+The daemon has a Click-based CLI:
+
+```bash
+python main.py --help
+python main.py run
+python main.py version
+python main.py service-hints
+```
+
+Running without a subcommand still starts the daemon:
+
+```bash
+python main.py run
+```
+
 ## Debian package (.deb) building
 
 This repository includes a minimal `debian/` packaging setup.
@@ -72,6 +89,9 @@ Or use the helper script to build and copy generated artifacts into
 ```bash
 ./scripts/build-deb.sh
 ```
+
+The helper script also validates that `main.py` version and
+`debian/changelog` package version match before building.
 
 This produces a package file in the parent directory, for example:
 

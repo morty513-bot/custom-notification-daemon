@@ -4,7 +4,7 @@ Documentation=man:systemd(1)
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/custom-notification-daemon
+ExecStart=/usr/bin/custom-notification-daemon run
 Restart=on-failure
 RestartSec=2
 

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 
 import asyncio
+from typing import Final
+
+import click
 
 from notifications import Notification, NotificationDaemon, run_daemon
 from renderer import OverlayRenderer, NotificationRenderer
+
+
+VERSION: Final[str] = "0.1.0"
 
 
 class RendererNotificationDaemon(NotificationDaemon):
@@ -28,5 +34,60 @@ class RendererNotificationDaemon(NotificationDaemon):
         self.emit_notification_closed(notification_id, reason)
 
 
+def _build_renderer(renderer_name: str) -> NotificationRenderer:
+    if renderer_name == "overlay":
+        return OverlayRenderer()
+
+    raise click.ClickException(f"Unknown renderer: {renderer_name}")
+
+
+def _run_daemon_with_renderer(renderer_name: str) -> None:
+    renderer = _build_renderer(renderer_name)
+    asyncio.run(run_daemon(RendererNotificationDaemon(renderer)))
+
+
+def _renderer_option(func: click.core.F) -> click.core.F:
+    return click.option(
+        "--renderer",
+        "renderer_name",
+        type=click.Choice(["overlay"], case_sensitive=False),
+        default="overlay",
+        show_default=True,
+        help="Renderer backend to use.",
+    )(func)
+
+
+@click.group(
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+@click.version_option(version=VERSION, prog_name="custom-notification-daemon")
+def cli() -> None:
+    """Custom notification daemon for Wayland/Sway."""
+    pass
+
+
+@cli.command("run")
+@_renderer_option
+def run_cmd(renderer_name: str) -> None:
+    """Run the notifications daemon."""
+    _run_daemon_with_renderer(renderer_name)
+
+
+@cli.command("version")
+def version_cmd() -> None:
+    """Print daemon version."""
+    click.echo(f"custom-notification-daemon {VERSION}")
+
+
+@cli.command("service-hints")
+def service_hints_cmd() -> None:
+    """Print useful systemd user-service commands."""
+    click.echo("systemctl --user daemon-reload")
+    click.echo("systemctl --user enable --now custom-notification-daemon.service")
+    click.echo("systemctl --user status custom-notification-daemon.service")
+    click.echo("systemctl --user restart custom-notification-daemon.service")
+
+
 if __name__ == "__main__":
-    asyncio.run(run_daemon(RendererNotificationDaemon(OverlayRenderer())))
+    cli()

@@ -1,5 +1,6 @@
 python3-gi
 python3-dbus-next
+python3-click
 gir1.2-gtk-3.0
 gir1.2-gtklayershell-0.1
 libgtk-layer-shell0

@@ -43,7 +43,7 @@ pip install -r requirements.txt
 Run daemon:
 
 source .venv/bin/activate
-python main.py
+python main.py run
 
 ## Renderer Decisions (Current)
 
@@ -98,7 +98,7 @@ If built package contains a wrong launcher path:
 - [ ] Improve install UX further (for example: one-command helper script, release automation, and polished first-run guidance).
 - [ ] Investigate nixpkgs/Home Manager packaging for install/manage flow (may be too complex for current project scope).
 - [ ] Add multiple renderer display modes and config-file selection between renderers.
-- [ ] Improve command-line interface (for example: Click-based CLI for run/config/service helpers).
+- [x] Improve command-line interface baseline: Click-based CLI with run/version/service helpers.
 - [ ] Add GitHub Actions workflow to build `.deb` package artifacts on push/release.
 - [ ] Improve visual design to be nicer and more colorful (better spacing, typography, accent colors).
 - [ ] Tie visual styling to urgency levels (for example: subtle normal, highlighted critical).
