@@ -170,6 +170,8 @@ class OverlayRenderer(NotificationRenderer):
         if self._gtk_major == 3 and hasattr(Gdk, "WindowTypeHint"):
             win.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
 
+        self._bind_click_to_dismiss(win, notification.id)
+
         if GtkLayerShell is not None:
             # Configure as layer-shell surface when bindings are available.
             GtkLayerShell.init_for_window(win)
@@ -236,9 +238,9 @@ class OverlayRenderer(NotificationRenderer):
             body_lbl.set_max_width_chars(60)
             self._box_add(outer, body_lbl)
 
+        action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         action_pairs = self._parse_actions(notification.actions)
         if action_pairs:
-            action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             for action_key, action_label in action_pairs:
                 btn = Gtk.Button(label=action_label)
                 btn.connect(
@@ -248,6 +250,8 @@ class OverlayRenderer(NotificationRenderer):
                     action_key,
                 )
                 self._box_add(action_row, btn)
+
+        if action_pairs:
             self._box_add(outer, action_row)
 
         if self._gtk_major == 3:
@@ -281,6 +285,50 @@ class OverlayRenderer(NotificationRenderer):
         self, _button: object, notification_id: int, action_key: str
     ) -> None:
         self._on_action(notification_id, action_key)
+        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
+
+    def _bind_click_to_dismiss(self, widget: Any, notification_id: int) -> None:
+        if self._gtk_major == 3:
+            if hasattr(widget, "add_events") and hasattr(self._Gdk, "EventMask"):
+                widget.add_events(self._Gdk.EventMask.BUTTON_PRESS_MASK)
+            widget.connect(
+                "button-press-event",
+                self._on_notification_clicked_gtk3,
+                notification_id,
+            )
+            return
+
+        if (
+            self._gtk_major == 4
+            and hasattr(self._Gtk, "GestureClick")
+            and hasattr(widget, "add_controller")
+        ):
+            click = self._Gtk.GestureClick()
+            click.set_button(1)
+            click.connect(
+                "pressed",
+                self._on_notification_clicked_gtk4,
+                notification_id,
+            )
+            widget.add_controller(click)
+
+    def _on_notification_clicked_gtk3(
+        self,
+        _widget: object,
+        _event: object,
+        notification_id: int,
+    ) -> bool:
+        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
+        return False
+
+    def _on_notification_clicked_gtk4(
+        self,
+        _gesture: object,
+        _n_press: int,
+        _x: float,
+        _y: float,
+        notification_id: int,
+    ) -> None:
         self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
 
     def _destroy_window(
