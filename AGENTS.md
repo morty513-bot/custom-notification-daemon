@@ -2,6 +2,7 @@
 
 This file is a lightweight handoff for future coding-agent sessions.
 Keep this file up to date where needed.
+Update the TODO section below whenever scope or status changes.
 
 ## Project Snapshot
 
@@ -14,10 +15,12 @@ Keep this file up to date where needed.
 - `main.py`: app entrypoint; wires daemon + renderer.
 - `notifications.py`: D-Bus protocol layer and daemon base class.
 - `renderer.py`: GTK renderer and layer-shell integration.
-- `apt-packages.txt`: required apt dependencies.
+- `apt-dependencies.txt`: required apt runtime dependencies.
+- `apt-dev-dependencies.txt`: apt development/build dependencies.
 - `requirements.txt`: Python dependencies.
 - `typings/`: local stubs for GI introspection modules used by type checker.
 - `pyrightconfig.json`: points pyright to local stubs.
+- `debian/`: Debian packaging files for `.deb` builds.
 
 ## Runtime Behavior Notes
 
@@ -29,7 +32,7 @@ Keep this file up to date where needed.
 
 Install system packages:
 
-sudo xargs -a apt-packages.txt apt install -y
+sudo xargs -a apt-dependencies.txt apt install -y
 
 Create venv with system site packages (important for apt-installed GI libs):
 
@@ -75,5 +78,27 @@ systemctl --user stop mako.service 2>/dev/null || true
 
 If renderer warns it is running without GtkLayerShell:
 
-- Verify apt packages from `apt-packages.txt` are installed.
+- Verify apt packages from `apt-dependencies.txt` are installed.
 - Recreate venv with `--system-site-packages`.
+
+If `dpkg-buildpackage` fails early on source format:
+
+- Ensure `debian/source/format` is exactly `3.0 (native)`.
+
+If built package contains a wrong launcher path:
+
+- Keep launcher mapping as `debian/custom-notification-daemon-launcher usr/bin/`.
+- Keep symlink in `debian/custom-notification-daemon.links` from
+  `/usr/bin/custom-notification-daemon-launcher` to `/usr/bin/custom-notification-daemon`.
+
+## TODO (Keep Up To Date)
+
+- [ ] Implement urgency levels end-to-end (respect `hints["urgency"]` for timeout, styling, and behavior).
+- [x] Make installation easy and reliable baseline: Debian package skeleton (`debian/`) with launcher + user service.
+- [ ] Improve install UX further (for example: one-command helper script, release automation, and polished first-run guidance).
+- [ ] Investigate nixpkgs/Home Manager packaging for install/manage flow (may be too complex for current project scope).
+- [ ] Add multiple renderer display modes and config-file selection between renderers.
+- [ ] Improve command-line interface (for example: Click-based CLI for run/config/service helpers).
+- [ ] Add GitHub Actions workflow to build `.deb` package artifacts on push/release.
+- [ ] Improve visual design to be nicer and more colorful (better spacing, typography, accent colors).
+- [ ] Tie visual styling to urgency levels (for example: subtle normal, highlighted critical).

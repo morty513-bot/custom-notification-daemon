@@ -1,0 +1,12 @@
+[Unit]
+Description=Custom Notification Daemon
+Documentation=man:systemd(1)
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/custom-notification-daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -6,12 +6,20 @@ My custom notification daemon script. Just for fun. Designed for running on Wayl
 
 ### 1. System packages
 
-The file `apt-packages.txt` contains the apt packages required for this project.
+The file `apt-dependencies.txt` contains the apt packages required for this project.
 I'm not bothering yet with version pinning.
 These can be installed with the command,
 
 ```bash
-sudo xargs -a apt-packages.txt apt install -y
+sudo xargs -a apt-dependencies.txt apt install -y
+```
+
+The file `apt-dev-dependencies.txt` also exists, for dependencies that are only for development, e.g. build tools.
+
+Install those with:
+
+```bash
+sudo xargs -a apt-dev-dependencies.txt apt install -y
 ```
 
 ### 2. (Optional) Virtual environment setup
@@ -37,4 +45,75 @@ Then the Python requirements can be installed with the `requirements.txt` file,
 
 ```bash
 pip install -r requirements.txt
+```
+
+## Debian package (.deb) building
+
+This repository includes a minimal `debian/` packaging setup.
+You can build a `.deb` and install it on other Ubuntu machines.
+
+### 1. Install package build tools
+
+```bash
+sudo xargs -a apt-dev-dependencies.txt apt install -y
+```
+
+### 2. Build the package
+
+From the repository root:
+
+```bash
+dpkg-buildpackage -us -uc
+```
+
+Or use the helper script to build and copy generated artifacts into
+`./build-artifacts/` inside this repo:
+
+```bash
+./scripts/build-deb.sh
+```
+
+This produces a package file in the parent directory, for example:
+
+`../custom-notification-daemon_0.1.0_all.deb`
+
+### 3. Install the package
+
+```bash
+sudo apt install ../custom-notification-daemon_0.1.0_all.deb
+```
+
+The package installs:
+
+- daemon code in `/usr/lib/custom-notification-daemon/`
+- launcher at `/usr/bin/custom-notification-daemon`
+- user systemd unit at `/usr/lib/systemd/user/custom-notification-daemon.service`
+
+Packaging implementation note:
+
+- launcher source file is `debian/custom-notification-daemon-launcher`
+- `debian/custom-notification-daemon.links` creates
+	`/usr/bin/custom-notification-daemon` as a symlink target for stable UX
+
+### 4. Enable service for your user
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now custom-notification-daemon.service
+```
+
+If another notifications daemon is active, disable it first:
+
+```bash
+systemctl --user disable --now dunst.service 2>/dev/null || true
+systemctl --user disable --now mako.service 2>/dev/null || true
+```
+
+### 5. Start from Sway login (instead of dunst)
+
+In your Sway config, ensure these lines exist:
+
+```bash
+exec_always --no-startup-id systemctl --user import-environment WAYLAND_DISPLAY SWAYSOCK DISPLAY XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+exec_always --no-startup-id systemctl --user restart custom-notification-daemon.service
 ```

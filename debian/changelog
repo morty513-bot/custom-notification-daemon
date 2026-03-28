@@ -1,0 +1,5 @@
+custom-notification-daemon (0.1.0) unstable; urgency=medium
+
+  * Initial Debian packaging.
+
+ -- Ofsouzap <ofsouzap@gmail.com>  Sat, 28 Mar 2026 12:00:00 +0000

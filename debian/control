@@ -1,0 +1,22 @@
+Source: custom-notification-daemon
+Section: utils
+Priority: optional
+Maintainer: Ofsouzap <ofsouzap@gmail.com>
+Build-Depends: debhelper-compat (= 13), dh-python
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: custom-notification-daemon
+Architecture: all
+Depends:
+ ${misc:Depends},
+ python3,
+ python3-dbus-next,
+ python3-gi,
+ gir1.2-gtk-3.0,
+ gir1.2-gtklayershell-0.1,
+ libgtk-layer-shell0
+Description: Custom freedesktop notifications daemon for Wayland/Sway
+ A lightweight Python daemon implementing org.freedesktop.Notifications.
+ It is tuned for Sway/Wayland and uses gtk-layer-shell when available
+ to render toast-style overlays that do not reserve workspace layout.
