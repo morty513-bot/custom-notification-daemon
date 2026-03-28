@@ -31,3 +31,4 @@ jobs:
           name: custom-notification-daemon-deb
           path: build-artifacts/*.deb
           if-no-files-found: error
+          retention-days: 14
