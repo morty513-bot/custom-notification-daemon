@@ -107,7 +107,6 @@ The package installs:
 
 - daemon code in `/usr/lib/custom-notification-daemon/`
 - launcher at `/usr/bin/custom-notification-daemon`
-- user systemd unit at `/usr/lib/systemd/user/custom-notification-daemon.service`
 
 Packaging implementation note:
 
@@ -115,12 +114,7 @@ Packaging implementation note:
 - `debian/custom-notification-daemon.links` creates
 	`/usr/bin/custom-notification-daemon` as a symlink target for stable UX
 
-### 4. Enable service for your user
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now custom-notification-daemon.service
-```
+### 4. Disable existing notification daemon
 
 If another notifications daemon is active, disable it first:
 
@@ -131,9 +125,8 @@ systemctl --user disable --now mako.service 2>/dev/null || true
 
 ### 5. Start from Sway login (instead of dunst)
 
-In your Sway config, ensure these lines exist:
+In your Sway config, ensure this line exists:
 
 ```bash
-exec_always --no-startup-id systemctl --user import-environment WAYLAND_DISPLAY SWAYSOCK DISPLAY XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
-exec_always --no-startup-id systemctl --user restart custom-notification-daemon.service
+exec_always --no-startup-id custom-notification-daemon run
 ```

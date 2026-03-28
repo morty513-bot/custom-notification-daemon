@@ -2,4 +2,3 @@ main.py usr/lib/custom-notification-daemon/
 notifications.py usr/lib/custom-notification-daemon/
 renderer.py usr/lib/custom-notification-daemon/
 debian/custom-notification-daemon-launcher usr/bin/
-debian/custom-notification-daemon.service usr/lib/systemd/user/

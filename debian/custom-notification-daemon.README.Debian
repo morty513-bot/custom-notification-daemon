@@ -1,18 +1,12 @@
 custom-notification-daemon for Debian/Ubuntu
 ===========================================
 
-After installing the package, enable it as a user service:
-
-  systemctl --user daemon-reload
-  systemctl --user enable --now custom-notification-daemon.service
-
 If another notification daemon is already running, disable it first:
 
   systemctl --user disable --now dunst.service 2>/dev/null || true
   systemctl --user disable --now mako.service 2>/dev/null || true
 
-For Sway sessions, import environment and restart this service on login.
-Add these lines to your sway config:
+For Sway sessions, start this daemon directly from Sway config.
+Add this line to your sway config:
 
-  exec_always --no-startup-id systemctl --user import-environment WAYLAND_DISPLAY SWAYSOCK DISPLAY XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
-  exec_always --no-startup-id systemctl --user restart custom-notification-daemon.service
+  exec_always --no-startup-id custom-notification-daemon run

@@ -94,9 +94,8 @@ If built package contains a wrong launcher path:
 ## TODO (Keep Up To Date)
 
 - [ ] Implement urgency levels end-to-end (respect `hints["urgency"]` for timeout, styling, and behavior).
-- [x] Make installation easy and reliable baseline: Debian package skeleton (`debian/`) with launcher + user service.
+- [x] Make installation easy and reliable baseline: Debian package skeleton (`debian/`) with launcher.
 - [ ] Improve install UX further (for example: one-command helper script, release automation, and polished first-run guidance).
-- [ ] Investigate nixpkgs/Home Manager packaging for install/manage flow (may be too complex for current project scope).
 - [ ] Add multiple renderer display modes and config-file selection between renderers.
 - [x] Improve command-line interface baseline: Click-based CLI with run/version/service helpers.
 - [x] Add GitHub Actions workflow to build `.deb` package artifacts on push/release.

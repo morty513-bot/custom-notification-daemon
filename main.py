@@ -80,14 +80,5 @@ def version_cmd() -> None:
     click.echo(f"custom-notification-daemon {VERSION}")
 
 
-@cli.command("service-hints")
-def service_hints_cmd() -> None:
-    """Print useful systemd user-service commands."""
-    click.echo("systemctl --user daemon-reload")
-    click.echo("systemctl --user enable --now custom-notification-daemon.service")
-    click.echo("systemctl --user status custom-notification-daemon.service")
-    click.echo("systemctl --user restart custom-notification-daemon.service")
-
-
 if __name__ == "__main__":
     cli()
