@@ -16,6 +16,7 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 log_file="$tmp_dir/notification.json"
+pid_file="$tmp_dir/daemon.pid"
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 export NOTIFY_LOG="$log_file"
 
@@ -37,13 +38,13 @@ dbus-run-session -- bash -lc '
   notify-send "custom-notification-daemon test" "hello from notify-send"
 
   for _ in $(seq 1 50); do
-    if [ -s "$3" ]; then
+    if [ -s "$4" ]; then
       break
     fi
     sleep 0.2
   done
 
-  if [ ! -s "$3" ]; then
+  if [ ! -s "$4" ]; then
     echo "notification was not received" >&2
     cat "$2" >&2 || true
     exit 1
@@ -51,6 +52,6 @@ dbus-run-session -- bash -lc '
 
   kill "$daemon_pid" 2>/dev/null || true
   wait "$daemon_pid" 2>/dev/null || true
-' bash "$repo_root/tests/daemon_runner.py" "$tmp_dir/daemon.log" "$log_file"
+' bash "$repo_root/tests/daemon_runner.py" "$tmp_dir/daemon.log" "$pid_file" "$log_file"
 
 echo "Integration test passed"
