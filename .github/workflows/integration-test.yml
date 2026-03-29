@@ -18,8 +18,8 @@ jobs:
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dbus-x11 libnotify-bin python3-pip
-          python3 -m pip install --user -r requirements.txt
+          sudo xargs -a apt-dependencies.txt apt-get install -y
+          sudo apt-get install -y dbus-x11 libnotify-bin
 
       - name: Run integration test
         run: |
