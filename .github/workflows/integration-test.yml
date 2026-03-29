@@ -15,18 +15,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dbus-x11 libnotify-bin python3-venv
-          python -m venv --system-site-packages .venv
-          .venv/bin/python -m pip install -r requirements.txt
+          sudo apt-get install -y dbus-x11 libnotify-bin python3-pip
+          python3 -m pip install --user -r requirements.txt
 
       - name: Run integration test
         run: |
