@@ -18,7 +18,6 @@ jobs:
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo xargs -a apt-dependencies.txt apt-get install -y
           sudo apt-get install -y dbus-x11 libnotify-bin
 
       - name: Run integration test

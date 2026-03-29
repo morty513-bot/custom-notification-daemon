@@ -20,7 +20,7 @@ pid_file="$tmp_dir/daemon.pid"
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 export NOTIFY_LOG="$log_file"
 
-dbus-run-session -- bash -lc '
+timeout 30s dbus-run-session -- bash -lc '
   set -euo pipefail
   /usr/bin/python3 -u "$1" >"$2" 2>&1 &
   daemon_pid=$!
@@ -49,6 +49,31 @@ dbus-run-session -- bash -lc '
     cat "$2" >&2 || true
     exit 1
   fi
+
+  /usr/bin/python3 - "$4" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:  # noqa: BLE001
+    print(f"failed to parse notification JSON: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+expected = {
+    "summary": "custom-notification-daemon test",
+    "body": "hello from notify-send",
+    "actions": [],
+    "expire_timeout": -1,
+}
+for key, value in expected.items():
+    if data.get(key) != value:
+        print(f"{key} mismatch: expected {value!r}, got {data.get(key)!r}", file=sys.stderr)
+        print(json.dumps(data, indent=2, sort_keys=True), file=sys.stderr)
+        raise SystemExit(1)
+PY
 
   kill "$daemon_pid" 2>/dev/null || true
   wait "$daemon_pid" 2>/dev/null || true
