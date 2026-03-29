@@ -30,4 +30,4 @@ jobs:
 
       - name: Run integration test
         run: |
-          dbus-run-session -- .venv/bin/python -m pytest -m integration tests/test_integration_notify_send.py
+          bash ./tests/integration_notify_send.sh
