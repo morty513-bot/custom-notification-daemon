@@ -1,0 +1,25 @@
+name: Integration Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  notify-send-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 libnotify-bin python3-dbus-next
+
+      - name: Run integration test
+        run: |
+          bash ./tests/integration_notify_send.sh
