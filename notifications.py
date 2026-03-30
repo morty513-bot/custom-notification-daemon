@@ -42,6 +42,8 @@ CLOSE_REASON_EXPIRED = 1
 CLOSE_REASON_DISMISSED = 2
 CLOSE_REASON_CLOSED_BY_CALL = 3
 CLOSE_REASON_UNDEFINED = 4
+# Replacement maps to the spec reason for programmatic close.
+CLOSE_REASON_REPLACED = CLOSE_REASON_CLOSED_BY_CALL
 
 
 @dataclass(frozen=True)

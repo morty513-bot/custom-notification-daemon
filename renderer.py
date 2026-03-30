@@ -8,6 +8,8 @@ from typing import Any, Callable
 from notifications import (
     CLOSE_REASON_DISMISSED,
     CLOSE_REASON_EXPIRED,
+    CLOSE_REASON_REPLACED,
+    CLOSE_REASON_UNDEFINED,
     Notification,
 )
 
@@ -107,6 +109,14 @@ class _BaseGtkRenderer(NotificationRenderer):
         self._on_action = on_action
         self._on_closed = on_closed
 
+    def show(self, notification: Notification) -> None:
+        self._GLib.idle_add(self._create_window, notification)
+
+    @abstractmethod
+    def _create_window(self, notification: Notification) -> bool:
+        """Create and show renderer-specific UI for a notification."""
+        ...
+
     def close(self, notification_id: int) -> None:
         self._GLib.idle_add(
             self._destroy_window,
@@ -119,7 +129,7 @@ class _BaseGtkRenderer(NotificationRenderer):
         self,
         notification_id: int,
         emit_closed: bool = False,
-        close_reason: int = 0,
+        close_reason: int = CLOSE_REASON_UNDEFINED,
     ) -> bool:
         with self._lock:
             win = self._windows.pop(notification_id, None)
@@ -230,50 +240,26 @@ class _BaseGtkRenderer(NotificationRenderer):
 
         return None
 
-
-class ToastRenderer(_BaseGtkRenderer):
-    """Renderer that displays notifications in a top-right toast.
-
-    Prefers layer-shell integration when available, but can fall back to a
-    normal GTK window so startup does not fail on systems without
-    GtkLayerShell/Gtk4LayerShell.
-    """
-
-    _DEFAULT_TIMEOUT_MS = 5000
-    _TOAST_HEIGHT = 120
-    _TOAST_WIDTH = 420
-    _TOAST_MARGIN = 12
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    # ------------------------------------------------------------------ #
-    # Public API                                                           #
-    # ------------------------------------------------------------------ #
-
-    def show(self, notification: Notification) -> None:
-        self._GLib.idle_add(self._create_window, notification)
-
-    # ------------------------------------------------------------------ #
-    # GTK-thread helpers — must only be called via GLib.idle_add          #
-    # ------------------------------------------------------------------ #
-
-    def _create_window(self, notification: Notification) -> bool:
-        Gtk, Gdk, GLib = self._Gtk, self._Gdk, self._GLib
-        GtkLayerShell = self._GtkLayerShell
-
-        # Replace window if this updates an existing notification
+    def _replace_existing_notification(self, notification: Notification) -> None:
         if notification.replaces_id:
-            self._destroy_window(notification.replaces_id, False, 0)
+            self._destroy_window(
+                notification.replaces_id,
+                False,
+                CLOSE_REASON_REPLACED,
+            )
 
-        # Create window
+    def _create_popup_window(self, gtk_module: Any) -> Any:
         if self._gtk_major == 3:
-            win = Gtk.Window(type=Gtk.WindowType.POPUP)
-        else:
-            win = Gtk.Window()
+            return gtk_module.Window(type=gtk_module.WindowType.POPUP)
+        return gtk_module.Window()
 
+    def _configure_common_window(
+        self, win: Any, gdk_module: Any, opacity: float | None = None
+    ) -> None:
         win.set_decorated(False)
         win.set_resizable(False)
+        if opacity is not None and hasattr(win, "set_opacity"):
+            win.set_opacity(opacity)
         if hasattr(win, "set_keep_above"):
             win.set_keep_above(True)
         if hasattr(win, "set_accept_focus"):
@@ -288,8 +274,62 @@ class ToastRenderer(_BaseGtkRenderer):
             win.set_skip_taskbar_hint(True)
         if hasattr(win, "set_skip_pager_hint"):
             win.set_skip_pager_hint(True)
-        if self._gtk_major == 3 and hasattr(Gdk, "WindowTypeHint"):
-            win.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
+        if self._gtk_major == 3 and hasattr(gdk_module, "WindowTypeHint"):
+            win.set_type_hint(gdk_module.WindowTypeHint.NOTIFICATION)
+
+    def _present_window(self, win: Any, content: Any) -> None:
+        if self._gtk_major == 3:
+            win.add(content)
+            win.show_all()
+        else:
+            win.set_child(content)
+            win.present()
+
+    def _register_window(self, notification_id: int, win: Any) -> None:
+        with self._lock:
+            self._windows[notification_id] = win
+
+    def _schedule_auto_dismiss(self, notification: Notification) -> None:
+        timeout_ms = (
+            notification.expire_timeout
+            if notification.expire_timeout > 0
+            else self._DEFAULT_TIMEOUT_MS
+        )
+        timeout_source = self._GLib.timeout_add(
+            timeout_ms,
+            self._destroy_window,
+            notification.id,
+            True,
+            CLOSE_REASON_EXPIRED,
+        )
+        self._timeout_sources[notification.id] = timeout_source
+
+
+class ToastRenderer(_BaseGtkRenderer):
+    """Renderer that displays notifications in a top-right toast.
+
+    Prefers layer-shell integration when available, but can fall back to a
+    normal GTK window so startup does not fail on systems without
+    GtkLayerShell/Gtk4LayerShell.
+    """
+
+    _DEFAULT_TIMEOUT_MS = 5000
+    _TOAST_HEIGHT = 120
+    _TOAST_WIDTH = 420
+    _TOAST_MARGIN = 12
+
+    # ------------------------------------------------------------------ #
+    # GTK-thread helpers — must only be called via GLib.idle_add          #
+    # ------------------------------------------------------------------ #
+
+    def _create_window(self, notification: Notification) -> bool:
+        Gtk, Gdk, GLib = self._Gtk, self._Gdk, self._GLib
+        GtkLayerShell = self._GtkLayerShell
+
+        self._replace_existing_notification(notification)
+
+        win = self._create_popup_window(Gtk)
+        self._configure_common_window(win, Gdk)
 
         self._bind_click_to_dismiss(win, notification.id)
 
@@ -375,30 +415,9 @@ class ToastRenderer(_BaseGtkRenderer):
         if action_pairs:
             self._box_add(outer, action_row)
 
-        if self._gtk_major == 3:
-            win.add(outer)
-            win.show_all()
-        else:
-            win.set_child(outer)
-            win.present()
-
-        with self._lock:
-            self._windows[notification.id] = win
-
-        # Set up auto-dismiss timeout
-        timeout_ms = (
-            notification.expire_timeout
-            if notification.expire_timeout > 0
-            else self._DEFAULT_TIMEOUT_MS
-        )
-        timeout_source = GLib.timeout_add(
-            timeout_ms,
-            self._destroy_window,
-            notification.id,
-            True,
-            CLOSE_REASON_EXPIRED,
-        )
-        self._timeout_sources[notification.id] = timeout_source
+        self._present_window(win, outer)
+        self._register_window(notification.id, win)
+        self._schedule_auto_dismiss(notification)
 
         return False  # don't repeat idle call
 
@@ -416,16 +435,6 @@ class BannerRenderer(_BaseGtkRenderer):
     _BANNER_MARGIN = 0
     _BANNER_OPACITY = 0.88
 
-    def __init__(self) -> None:
-        super().__init__()
-
-    # ------------------------------------------------------------------ #
-    # Public API                                                           #
-    # ------------------------------------------------------------------ #
-
-    def show(self, notification: Notification) -> None:
-        self._GLib.idle_add(self._create_window, notification)
-
     # ------------------------------------------------------------------ #
     # GTK-thread helpers — must only be called via GLib.idle_add          #
     # ------------------------------------------------------------------ #
@@ -434,36 +443,10 @@ class BannerRenderer(_BaseGtkRenderer):
         Gtk, Gdk, GLib = self._Gtk, self._Gdk, self._GLib
         GtkLayerShell = self._GtkLayerShell
 
-        # Replace window if this updates an existing notification
-        if notification.replaces_id:
-            self._destroy_window(notification.replaces_id, False, 0)
+        self._replace_existing_notification(notification)
 
-        # Create window
-        if self._gtk_major == 3:
-            win = Gtk.Window(type=Gtk.WindowType.POPUP)
-        else:
-            win = Gtk.Window()
-
-        win.set_decorated(False)
-        win.set_resizable(False)
-        if hasattr(win, "set_opacity"):
-            win.set_opacity(self._BANNER_OPACITY)
-        if hasattr(win, "set_keep_above"):
-            win.set_keep_above(True)
-        if hasattr(win, "set_accept_focus"):
-            win.set_accept_focus(False)
-        if hasattr(win, "set_focus_on_map"):
-            win.set_focus_on_map(False)
-        if hasattr(win, "set_can_focus"):
-            win.set_can_focus(False)
-        if hasattr(win, "set_focusable"):
-            win.set_focusable(False)
-        if hasattr(win, "set_skip_taskbar_hint"):
-            win.set_skip_taskbar_hint(True)
-        if hasattr(win, "set_skip_pager_hint"):
-            win.set_skip_pager_hint(True)
-        if self._gtk_major == 3 and hasattr(Gdk, "WindowTypeHint"):
-            win.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
+        win = self._create_popup_window(Gtk)
+        self._configure_common_window(win, Gdk, opacity=self._BANNER_OPACITY)
 
         self._bind_click_to_dismiss(win, notification.id)
 
@@ -559,30 +542,9 @@ class BannerRenderer(_BaseGtkRenderer):
         if action_pairs:
             self._box_add(outer, action_row)
 
-        if self._gtk_major == 3:
-            win.add(outer)
-            win.show_all()
-        else:
-            win.set_child(outer)
-            win.present()
-
-        with self._lock:
-            self._windows[notification.id] = win
-
-        # Set up auto-dismiss timeout
-        timeout_ms = (
-            notification.expire_timeout
-            if notification.expire_timeout > 0
-            else self._DEFAULT_TIMEOUT_MS
-        )
-        timeout_source = GLib.timeout_add(
-            timeout_ms,
-            self._destroy_window,
-            notification.id,
-            True,
-            CLOSE_REASON_EXPIRED,
-        )
-        self._timeout_sources[notification.id] = timeout_source
+        self._present_window(win, outer)
+        self._register_window(notification.id, win)
+        self._schedule_auto_dismiss(notification)
 
         return False  # don't repeat idle call
 
