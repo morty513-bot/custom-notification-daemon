@@ -400,8 +400,8 @@ class BannerRenderer(NotificationRenderer):
     """
 
     _DEFAULT_TIMEOUT_MS = 5000
-    _BANNER_HEIGHT = 120
-    _BANNER_WIDTH = 420
+    _BANNER_HEIGHT = 112
+    _BANNER_WIDTH = 0
     _BANNER_MARGIN = 0
 
     def __init__(self) -> None:
@@ -538,17 +538,12 @@ class BannerRenderer(NotificationRenderer):
             if monitor is not None:
                 GtkLayerShell.set_monitor(win, monitor)
 
-            # Position as a centered banner across the screen.
+            # Position as a full-width centered banner across the middle.
             GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, True)
             GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, True)
             GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, True)
             if hasattr(GtkLayerShell, "set_margin"):
-                monitor = self._get_primary_monitor(Gdk)
-                if monitor is not None and hasattr(monitor, "get_geometry"):
-                    geometry = monitor.get_geometry()
-                    top_margin = max(0, (geometry.height - self._BANNER_HEIGHT) // 2)
-                else:
-                    top_margin = self._BANNER_MARGIN
+                top_margin = self._banner_top_margin(Gdk)
                 GtkLayerShell.set_margin(win, GtkLayerShell.Edge.TOP, top_margin)
                 GtkLayerShell.set_margin(win, GtkLayerShell.Edge.LEFT, self._BANNER_MARGIN)
                 GtkLayerShell.set_margin(win, GtkLayerShell.Edge.RIGHT, self._BANNER_MARGIN)
@@ -563,7 +558,7 @@ class BannerRenderer(NotificationRenderer):
                 )
 
         # Set size
-        win.set_default_size(self._BANNER_WIDTH, self._BANNER_HEIGHT)
+        win.set_default_size(self._banner_width(Gdk), self._BANNER_HEIGHT)
         if GtkLayerShell is not None:
             # A zero exclusive-zone draws over existing windows instead of
             # reserving workspace space from the compositor.
@@ -571,14 +566,16 @@ class BannerRenderer(NotificationRenderer):
 
         # Build UI
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        outer.set_margin_top(8)
+        if hasattr(outer, "set_hexpand"):
+            outer.set_hexpand(True)
+        outer.set_margin_top(10)
         outer.set_margin_bottom(8)
         outer.set_margin_start(16)
         outer.set_margin_end(16)
 
         if notification.app_name:
             app_lbl = Gtk.Label(label=notification.app_name)
-            app_lbl.set_xalign(0.0)
+            app_lbl.set_xalign(0.5)
             app_lbl.get_style_context().add_class("dim-label")
             self._box_add(outer, app_lbl)
 
@@ -587,19 +584,21 @@ class BannerRenderer(NotificationRenderer):
             summary_lbl.set_markup(
                 f"<b>{GLib.markup_escape_text(notification.summary)}</b>"
             )
-            summary_lbl.set_xalign(0.0)
+            summary_lbl.set_xalign(0.5)
             self._set_label_wrap(summary_lbl, True)
             summary_lbl.set_max_width_chars(120)
             self._box_add(outer, summary_lbl)
 
         if notification.body:
             body_lbl = Gtk.Label(label=notification.body)
-            body_lbl.set_xalign(0.0)
+            body_lbl.set_xalign(0.5)
             self._set_label_wrap(body_lbl, True)
             body_lbl.set_max_width_chars(120)
             self._box_add(outer, body_lbl)
 
         action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        if hasattr(Gtk, "Align") and hasattr(Gtk.Align, "CENTER"):
+            action_row.set_halign(Gtk.Align.CENTER)
         action_pairs = self._parse_actions(notification.actions)
         if action_pairs:
             for action_key, action_label in action_pairs:
@@ -641,6 +640,22 @@ class BannerRenderer(NotificationRenderer):
         self._timeout_sources[notification.id] = timeout_source
 
         return False  # don't repeat idle call
+
+    def _banner_width(self, gdk_module: Any) -> int:
+        monitor = self._get_primary_monitor(gdk_module)
+        if monitor is None or not hasattr(monitor, "get_geometry"):
+            return 1600
+
+        geometry = monitor.get_geometry()
+        return max(800, geometry.width)
+
+    def _banner_top_margin(self, gdk_module: Any) -> int:
+        monitor = self._get_primary_monitor(gdk_module)
+        if monitor is None or not hasattr(monitor, "get_geometry"):
+            return 0
+
+        geometry = monitor.get_geometry()
+        return max(0, (geometry.height - self._BANNER_HEIGHT) // 2)
 
     def _on_action_clicked(
         self, _button: object, notification_id: int, action_key: str
