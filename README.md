@@ -64,6 +64,13 @@ Running without a subcommand still starts the daemon:
 python main.py run
 ```
 
+Renderer options:
+
+```bash
+python main.py run --renderer overlay
+python main.py run --renderer banner
+```
+
 ## Debian package (.deb) building
 
 This repository includes a minimal `debian/` packaging setup.

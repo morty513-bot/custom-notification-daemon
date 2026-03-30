@@ -6,7 +6,7 @@ from typing import Final
 import click
 
 from notifications import Notification, NotificationDaemon, run_daemon
-from renderer import OverlayRenderer, NotificationRenderer
+from renderer import BannerRenderer, OverlayRenderer, NotificationRenderer
 
 
 VERSION: Final[str] = "0.1.0"
@@ -37,6 +37,8 @@ class RendererNotificationDaemon(NotificationDaemon):
 def _build_renderer(renderer_name: str) -> NotificationRenderer:
     if renderer_name == "overlay":
         return OverlayRenderer()
+    if renderer_name == "banner":
+        return BannerRenderer()
 
     raise click.ClickException(f"Unknown renderer: {renderer_name}")
 
@@ -51,7 +53,7 @@ def _renderer_option(func: click.core.F) -> click.core.F:
     return click.option(
         "--renderer",
         "renderer_name",
-        type=click.Choice(["overlay"], case_sensitive=False),
+        type=click.Choice(["overlay", "banner"], case_sensitive=False),
         default="overlay",
         show_default=True,
         help="Renderer backend to use.",
