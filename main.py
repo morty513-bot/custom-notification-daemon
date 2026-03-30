@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
-from typing import Any, Final, cast
+from typing import Final
 
 import click
 
