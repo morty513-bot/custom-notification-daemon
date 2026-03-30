@@ -178,6 +178,51 @@ class _BaseGtkRenderer(NotificationRenderer):
     ) -> None:
         self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
 
+    def _on_action_clicked(
+        self, _button: object, notification_id: int, action_key: str
+    ) -> None:
+        self._on_action(notification_id, action_key)
+        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
+
+    @staticmethod
+    def _parse_actions(actions: list[str]) -> list[tuple[str, str]]:
+        """Parse actions list into (key, label) tuples."""
+        pairs: list[tuple[str, str]] = []
+        for i in range(0, len(actions) - 1, 2):
+            action_key = actions[i]
+            action_label = actions[i + 1]
+            pairs.append((action_key, action_label))
+        return pairs
+
+    def _box_add(self, box: Any, child: Any) -> None:
+        if self._gtk_major == 3:
+            box.pack_start(child, False, False, 0)
+        else:
+            box.append(child)
+
+    def _set_label_wrap(self, label: Any, enabled: bool) -> None:
+        if self._gtk_major == 3:
+            label.set_line_wrap(enabled)
+        else:
+            label.set_wrap(enabled)
+
+    def _get_primary_monitor(self, gdk_module: Any) -> Any:
+        display = gdk_module.Display.get_default()
+        if display is None:
+            return None
+
+        if hasattr(display, "get_primary_monitor"):
+            monitor = display.get_primary_monitor()
+            if monitor is not None:
+                return monitor
+
+        if hasattr(display, "get_monitors"):
+            monitors = display.get_monitors()
+            if monitors and monitors.get_n_items() > 0:
+                return monitors.get_item(0)
+
+        return None
+
 
 class ToastRenderer(_BaseGtkRenderer):
     """Renderer that displays notifications in a top-right toast.
@@ -350,45 +395,6 @@ class ToastRenderer(_BaseGtkRenderer):
 
         return False  # don't repeat idle call
 
-    @staticmethod
-    def _parse_actions(actions: list[str]) -> list[tuple[str, str]]:
-        """Parse actions list into (key, label) tuples."""
-        pairs: list[tuple[str, str]] = []
-        for i in range(0, len(actions) - 1, 2):
-            action_key = actions[i]
-            action_label = actions[i + 1]
-            pairs.append((action_key, action_label))
-        return pairs
-
-    def _box_add(self, box: Any, child: Any) -> None:
-        if self._gtk_major == 3:
-            box.pack_start(child, False, False, 0)
-        else:
-            box.append(child)
-
-    def _set_label_wrap(self, label: Any, enabled: bool) -> None:
-        if self._gtk_major == 3:
-            label.set_line_wrap(enabled)
-        else:
-            label.set_wrap(enabled)
-
-    def _get_primary_monitor(self, gdk_module: Any) -> Any:
-        display = gdk_module.Display.get_default()
-        if display is None:
-            return None
-
-        if hasattr(display, "get_primary_monitor"):
-            monitor = display.get_primary_monitor()
-            if monitor is not None:
-                return monitor
-
-        if hasattr(display, "get_monitors"):
-            monitors = display.get_monitors()
-            if monitors and monitors.get_n_items() > 0:
-                return monitors.get_item(0)
-
-        return None
-
 
 class BannerRenderer(_BaseGtkRenderer):
     """Renderer that displays notifications in a centered horizontal banner.
@@ -400,7 +406,6 @@ class BannerRenderer(_BaseGtkRenderer):
 
     _DEFAULT_TIMEOUT_MS = 5000
     _BANNER_HEIGHT = 112
-    _BANNER_WIDTH = 0
     _BANNER_MARGIN = 0
 
     def __init__(self) -> None:
@@ -412,14 +417,6 @@ class BannerRenderer(_BaseGtkRenderer):
 
     def show(self, notification: Notification) -> None:
         self._GLib.idle_add(self._create_window, notification)
-
-    def set_handlers(
-        self,
-        on_action: Callable[[int, str], None],
-        on_closed: Callable[[int, int], None],
-    ) -> None:
-        self._on_action = on_action
-        self._on_closed = on_closed
 
     # ------------------------------------------------------------------ #
     # GTK-thread helpers — must only be called via GLib.idle_add          #
@@ -593,112 +590,3 @@ class BannerRenderer(_BaseGtkRenderer):
 
     def _banner_horizontal_margin(self) -> int:
         return 24
-
-    def _on_action_clicked(
-        self, _button: object, notification_id: int, action_key: str
-    ) -> None:
-        self._on_action(notification_id, action_key)
-        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-
-    def _bind_click_to_dismiss(self, widget: Any, notification_id: int) -> None:
-        if self._gtk_major == 3:
-            if hasattr(widget, "add_events") and hasattr(self._Gdk, "EventMask"):
-                widget.add_events(self._Gdk.EventMask.BUTTON_PRESS_MASK)
-            widget.connect(
-                "button-press-event",
-                self._on_notification_clicked_gtk3,
-                notification_id,
-            )
-            return
-
-        if (
-            self._gtk_major == 4
-            and hasattr(self._Gtk, "GestureClick")
-            and hasattr(widget, "add_controller")
-        ):
-            click = self._Gtk.GestureClick()
-            click.set_button(1)
-            click.connect(
-                "pressed",
-                self._on_notification_clicked_gtk4,
-                notification_id,
-            )
-            widget.add_controller(click)
-
-    def _on_notification_clicked_gtk3(
-        self,
-        _widget: object,
-        _event: object,
-        notification_id: int,
-    ) -> bool:
-        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-        return False
-
-    def _on_notification_clicked_gtk4(
-        self,
-        _gesture: object,
-        _n_press: int,
-        _x: float,
-        _y: float,
-        notification_id: int,
-    ) -> None:
-        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-
-    def _destroy_window(
-        self,
-        notification_id: int,
-        emit_closed: bool = False,
-        close_reason: int = 0,
-    ) -> bool:
-        with self._lock:
-            win = self._windows.pop(notification_id, None)
-            timeout_source = self._timeout_sources.pop(notification_id, None)
-
-        if win is not None:
-            # Cancel pending timeout if window is being destroyed early
-            if timeout_source is not None:
-                self._GLib.source_remove(timeout_source)
-            win.destroy()
-            if emit_closed:
-                self._on_closed(notification_id, close_reason)
-
-        return False  # don't repeat timeout/idle call
-
-    @staticmethod
-    def _parse_actions(actions: list[str]) -> list[tuple[str, str]]:
-        """Parse actions list into (key, label) tuples."""
-        pairs: list[tuple[str, str]] = []
-        for i in range(0, len(actions) - 1, 2):
-            action_key = actions[i]
-            action_label = actions[i + 1]
-            pairs.append((action_key, action_label))
-        return pairs
-
-    def _box_add(self, box: Any, child: Any) -> None:
-        if self._gtk_major == 3:
-            box.pack_start(child, False, False, 0)
-        else:
-            box.append(child)
-
-    def _set_label_wrap(self, label: Any, enabled: bool) -> None:
-        if self._gtk_major == 3:
-            label.set_line_wrap(enabled)
-        else:
-            label.set_wrap(enabled)
-
-    def _get_primary_monitor(self, gdk_module: Any) -> Any:
-        display = gdk_module.Display.get_default()
-        if display is None:
-            return None
-
-        if hasattr(display, "get_primary_monitor"):
-            monitor = display.get_primary_monitor()
-            if monitor is not None:
-                return monitor
-
-        if hasattr(display, "get_monitors"):
-            monitors = display.get_monitors()
-            if monitors and monitors.get_n_items() > 0:
-                return monitors.get_item(0)
-
-        return None
