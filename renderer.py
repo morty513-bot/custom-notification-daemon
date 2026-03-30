@@ -33,91 +33,15 @@ class NotificationRenderer(ABC):
         pass
 
 
-class OverlayRenderer(NotificationRenderer):
-    """Renderer that displays notifications in a top-right toast.
 
-    Prefers layer-shell integration when available, but can fall back to a
-    normal GTK window so startup does not fail on systems without
-    GtkLayerShell/Gtk4LayerShell.
-    """
 
+class _BaseGtkRenderer(NotificationRenderer):
     _DEFAULT_TIMEOUT_MS = 5000
-    _TOAST_HEIGHT = 120
-    _TOAST_WIDTH = 420
-    _TOAST_MARGIN = 12
 
     def __init__(self) -> None:
-        import gi
-
-        gtk_major = 3
-        try:
-            gi.require_version("Gtk", "3.0")
-        except ValueError:
-            gi.require_version("Gtk", "4.0")
-            gtk_major = 4
-
-        from gi.repository import Gtk, Gdk, GLib
-
-        layer_shell = None
-        if gtk_major == 3:
-            for version in ("0.1", "0"):
-                try:
-                    gi.require_version("GtkLayerShell", version)
-                    from gi.repository import GtkLayerShell
-
-                    layer_shell = GtkLayerShell
-                    break
-                except ValueError:
-                    continue
-        else:
-            for version in ("1.0", "0"):
-                try:
-                    gi.require_version("Gtk4LayerShell", version)
-                    from gi.repository import Gtk4LayerShell
-
-                    layer_shell = Gtk4LayerShell
-                    break
-                except ValueError:
-                    continue
-
-        self._Gtk = Gtk
-        self._Gdk = Gdk
-        self._GLib = GLib
-        self._gtk_major = gtk_major
-        self._GtkLayerShell = layer_shell
-        self._main_loop = None
-
-        if self._GtkLayerShell is None:
-            print(
-                "[custom-notification-daemon] Running without GtkLayerShell. "
-                "Notifications will be regular windows. "
-                "Install: gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 "
-                "libgtk-layer-shell0",
-                file=sys.stderr,
-            )
-
-        self._windows: dict[int, Any] = {}
-        self._lock = threading.Lock()
-        self._on_action: Callable[[int, str], None] = lambda _id, _key: None
-        self._on_closed: Callable[[int, int], None] = lambda _id, _reason: None
-        self._timeout_sources: dict[int, int] = {}
-
-        if self._gtk_major == 3:
-            gtk_thread = threading.Thread(target=Gtk.main, daemon=True)
-        else:
-            self._main_loop = GLib.MainLoop()
-            gtk_thread = threading.Thread(target=self._main_loop.run, daemon=True)
-        gtk_thread.start()
-
-    # ------------------------------------------------------------------ #
-    # Public API                                                           #
-    # ------------------------------------------------------------------ #
-
-    def show(self, notification: Notification) -> None:
-        self._GLib.idle_add(self._create_window, notification)
+        super().__init__()
 
     def close(self, notification_id: int) -> None:
-        """Close a notification programmatically."""
         self._GLib.idle_add(
             self._destroy_window,
             notification_id,
@@ -132,6 +56,92 @@ class OverlayRenderer(NotificationRenderer):
     ) -> None:
         self._on_action = on_action
         self._on_closed = on_closed
+
+    def _destroy_window(
+        self,
+        notification_id: int,
+        emit_closed: bool = False,
+        close_reason: int = 0,
+    ) -> bool:
+        with self._lock:
+            win = self._windows.pop(notification_id, None)
+            timeout_source = self._timeout_sources.pop(notification_id, None)
+
+        if win is not None:
+            if timeout_source is not None:
+                self._GLib.source_remove(timeout_source)
+            win.destroy()
+            if emit_closed:
+                self._on_closed(notification_id, close_reason)
+
+        return False
+
+    def _bind_click_to_dismiss(self, widget: Any, notification_id: int) -> None:
+        if self._gtk_major == 3:
+            if hasattr(widget, "add_events") and hasattr(self._Gdk, "EventMask"):
+                widget.add_events(self._Gdk.EventMask.BUTTON_PRESS_MASK)
+            widget.connect(
+                "button-press-event",
+                self._on_notification_clicked_gtk3,
+                notification_id,
+            )
+            return
+
+        if (
+            self._gtk_major == 4
+            and hasattr(self._Gtk, "GestureClick")
+            and hasattr(widget, "add_controller")
+        ):
+            click = self._Gtk.GestureClick()
+            click.set_button(1)
+            click.connect(
+                "pressed",
+                self._on_notification_clicked_gtk4,
+                notification_id,
+            )
+            widget.add_controller(click)
+
+    def _on_notification_clicked_gtk3(
+        self,
+        _widget: object,
+        _event: object,
+        notification_id: int,
+    ) -> bool:
+        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
+        return False
+
+    def _on_notification_clicked_gtk4(
+        self,
+        _gesture: object,
+        _n_press: int,
+        _x: float,
+        _y: float,
+        notification_id: int,
+    ) -> None:
+        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
+
+class OverlayRenderer(_BaseGtkRenderer):
+    """Renderer that displays notifications in a top-right toast.
+
+    Prefers layer-shell integration when available, but can fall back to a
+    normal GTK window so startup does not fail on systems without
+    GtkLayerShell/Gtk4LayerShell.
+    """
+
+    _DEFAULT_TIMEOUT_MS = 5000
+    _TOAST_HEIGHT = 120
+    _TOAST_WIDTH = 420
+    _TOAST_MARGIN = 12
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    # ------------------------------------------------------------------ #
+    # Public API                                                           #
+    # ------------------------------------------------------------------ #
+
+    def show(self, notification: Notification) -> None:
+        self._GLib.idle_add(self._create_window, notification)
 
     # ------------------------------------------------------------------ #
     # GTK-thread helpers — must only be called via GLib.idle_add          #
@@ -281,56 +291,6 @@ class OverlayRenderer(NotificationRenderer):
 
         return False  # don't repeat idle call
 
-    def _on_action_clicked(
-        self, _button: object, notification_id: int, action_key: str
-    ) -> None:
-        self._on_action(notification_id, action_key)
-        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-
-    def _bind_click_to_dismiss(self, widget: Any, notification_id: int) -> None:
-        if self._gtk_major == 3:
-            if hasattr(widget, "add_events") and hasattr(self._Gdk, "EventMask"):
-                widget.add_events(self._Gdk.EventMask.BUTTON_PRESS_MASK)
-            widget.connect(
-                "button-press-event",
-                self._on_notification_clicked_gtk3,
-                notification_id,
-            )
-            return
-
-        if (
-            self._gtk_major == 4
-            and hasattr(self._Gtk, "GestureClick")
-            and hasattr(widget, "add_controller")
-        ):
-            click = self._Gtk.GestureClick()
-            click.set_button(1)
-            click.connect(
-                "pressed",
-                self._on_notification_clicked_gtk4,
-                notification_id,
-            )
-            widget.add_controller(click)
-
-    def _on_notification_clicked_gtk3(
-        self,
-        _widget: object,
-        _event: object,
-        notification_id: int,
-    ) -> bool:
-        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-        return False
-
-    def _on_notification_clicked_gtk4(
-        self,
-        _gesture: object,
-        _n_press: int,
-        _x: float,
-        _y: float,
-        notification_id: int,
-    ) -> None:
-        self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
-
     def _destroy_window(
         self,
         notification_id: int,
@@ -391,7 +351,7 @@ class OverlayRenderer(NotificationRenderer):
         return None
 
 
-class BannerRenderer(NotificationRenderer):
+class BannerRenderer(_BaseGtkRenderer):
     """Renderer that displays notifications in a centered horizontal banner.
 
     Prefers layer-shell integration when available, but can fall back to a
@@ -405,67 +365,7 @@ class BannerRenderer(NotificationRenderer):
     _BANNER_MARGIN = 0
 
     def __init__(self) -> None:
-        import gi
-
-        gtk_major = 3
-        try:
-            gi.require_version("Gtk", "3.0")
-        except ValueError:
-            gi.require_version("Gtk", "4.0")
-            gtk_major = 4
-
-        from gi.repository import Gtk, Gdk, GLib
-
-        layer_shell = None
-        if gtk_major == 3:
-            for version in ("0.1", "0"):
-                try:
-                    gi.require_version("GtkLayerShell", version)
-                    from gi.repository import GtkLayerShell
-
-                    layer_shell = GtkLayerShell
-                    break
-                except ValueError:
-                    continue
-        else:
-            for version in ("1.0", "0"):
-                try:
-                    gi.require_version("Gtk4LayerShell", version)
-                    from gi.repository import Gtk4LayerShell
-
-                    layer_shell = Gtk4LayerShell
-                    break
-                except ValueError:
-                    continue
-
-        self._Gtk = Gtk
-        self._Gdk = Gdk
-        self._GLib = GLib
-        self._gtk_major = gtk_major
-        self._GtkLayerShell = layer_shell
-        self._main_loop = None
-
-        if self._GtkLayerShell is None:
-            print(
-                "[custom-notification-daemon] Running without GtkLayerShell. "
-                "Notifications will be regular windows. "
-                "Install: gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 "
-                "libgtk-layer-shell0",
-                file=sys.stderr,
-            )
-
-        self._windows: dict[int, Any] = {}
-        self._lock = threading.Lock()
-        self._on_action: Callable[[int, str], None] = lambda _id, _key: None
-        self._on_closed: Callable[[int, int], None] = lambda _id, _reason: None
-        self._timeout_sources: dict[int, int] = {}
-
-        if self._gtk_major == 3:
-            gtk_thread = threading.Thread(target=Gtk.main, daemon=True)
-        else:
-            self._main_loop = GLib.MainLoop()
-            gtk_thread = threading.Thread(target=self._main_loop.run, daemon=True)
-        gtk_thread.start()
+        super().__init__()
 
     # ------------------------------------------------------------------ #
     # Public API                                                           #
