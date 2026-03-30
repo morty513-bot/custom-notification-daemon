@@ -33,8 +33,6 @@ class NotificationRenderer(ABC):
         pass
 
 
-
-
 class _BaseGtkRenderer(NotificationRenderer):
     _DEFAULT_TIMEOUT_MS = 5000
 
@@ -179,6 +177,7 @@ class _BaseGtkRenderer(NotificationRenderer):
         notification_id: int,
     ) -> None:
         self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
+
 
 class ToastRenderer(_BaseGtkRenderer):
     """Renderer that displays notifications in a top-right toast.
@@ -476,8 +475,12 @@ class BannerRenderer(_BaseGtkRenderer):
             if hasattr(GtkLayerShell, "set_margin"):
                 top_margin = self._banner_top_margin(Gdk)
                 GtkLayerShell.set_margin(win, GtkLayerShell.Edge.TOP, top_margin)
-                GtkLayerShell.set_margin(win, GtkLayerShell.Edge.LEFT, self._BANNER_MARGIN)
-                GtkLayerShell.set_margin(win, GtkLayerShell.Edge.RIGHT, self._BANNER_MARGIN)
+                GtkLayerShell.set_margin(
+                    win, GtkLayerShell.Edge.LEFT, self._BANNER_MARGIN
+                )
+                GtkLayerShell.set_margin(
+                    win, GtkLayerShell.Edge.RIGHT, self._BANNER_MARGIN
+                )
 
             # Avoid taking keyboard focus like dunst.
             if hasattr(GtkLayerShell, "set_keyboard_mode") and hasattr(
