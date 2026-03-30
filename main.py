@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
-from typing import Final
+from typing import Any, Final, cast
 
 import click
 
@@ -49,7 +49,7 @@ def _run_daemon_with_renderer(renderer_name: str) -> None:
     asyncio.run(run_daemon(RendererNotificationDaemon(renderer)))
 
 
-def _renderer_option(func: click.core.F) -> click.core.F:
+def _renderer_option(func: Any) -> Any:
     return click.option(
         "--renderer",
         "renderer_name",
@@ -60,15 +60,20 @@ def _renderer_option(func: click.core.F) -> click.core.F:
     )(func)
 
 
-@click.group(
-    no_args_is_help=True,
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
-@click.version_option(version=VERSION, prog_name="custom-notification-daemon")
-def cli() -> None:
+def _cli() -> None:
     """Custom notification daemon for Wayland/Sway."""
     pass
 
+
+cli = cast(
+    Any,
+    click.version_option(version=VERSION, prog_name="custom-notification-daemon")(
+        click.group(
+            no_args_is_help=True,
+            context_settings={"help_option_names": ["-h", "--help"]},
+        )(_cli)
+    ),
+)
 
 @cli.command("run")
 @_renderer_option

@@ -29,6 +29,8 @@ class _GtkBox(Protocol):
     def set_margin_bottom(self, margin: int) -> None: ...
     def set_margin_start(self, margin: int) -> None: ...
     def set_margin_end(self, margin: int) -> None: ...
+    def set_hexpand(self, hexpand: bool) -> None: ...
+    def set_halign(self, align: int) -> None: ...
     def pack_start(
         self, child: Any, expand: bool, fill: bool, padding: int
     ) -> None: ...
@@ -56,9 +58,14 @@ class _GestureClick(Protocol):
     def set_button(self, button: int) -> None: ...
     def connect(self, detailed_signal: str, handler: Any, *args: Any) -> None: ...
 
+class _GtkAlign:
+    CENTER: int
+    FILL: int
+
 class _GtkNamespace(Protocol):
     WindowType: type[_GtkWindowType]
     Orientation: type[_GtkOrientation]
+    Align: type[_GtkAlign]
     GestureClick: type[_GestureClick]
 
     def Window(self, *, type: int | None = None) -> _GtkWindow: ...
@@ -73,8 +80,12 @@ class _GdkWindowTypeHint:
 class _GdkEventMask:
     BUTTON_PRESS_MASK: int
 
+class _Geometry(Protocol):
+    width: int
+    height: int
+
 class _GdkMonitor(Protocol):
-    pass
+    def get_geometry(self) -> _Geometry: ...
 
 class _GListModel(Protocol):
     def get_n_items(self) -> int: ...
