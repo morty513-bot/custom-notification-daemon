@@ -468,10 +468,10 @@ class BannerRenderer(_BaseGtkRenderer):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         if hasattr(outer, "set_hexpand"):
             outer.set_hexpand(True)
-        outer.set_margin_top(10)
-        outer.set_margin_bottom(8)
-        outer.set_margin_start(16)
-        outer.set_margin_end(16)
+        outer.set_margin_top(14)
+        outer.set_margin_bottom(14)
+        outer.set_margin_start(self._banner_horizontal_margin())
+        outer.set_margin_end(self._banner_horizontal_margin())
 
         if notification.app_name:
             app_lbl = Gtk.Label(label=notification.app_name)
@@ -486,14 +486,14 @@ class BannerRenderer(_BaseGtkRenderer):
             )
             summary_lbl.set_xalign(0.5)
             self._set_label_wrap(summary_lbl, True)
-            summary_lbl.set_max_width_chars(120)
+            summary_lbl.set_max_width_chars(140)
             self._box_add(outer, summary_lbl)
 
         if notification.body:
             body_lbl = Gtk.Label(label=notification.body)
             body_lbl.set_xalign(0.5)
             self._set_label_wrap(body_lbl, True)
-            body_lbl.set_max_width_chars(120)
+            body_lbl.set_max_width_chars(140)
             self._box_add(outer, body_lbl)
 
         action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -556,6 +556,9 @@ class BannerRenderer(_BaseGtkRenderer):
 
         geometry = monitor.get_geometry()
         return max(0, (geometry.height - self._BANNER_HEIGHT) // 2)
+
+    def _banner_horizontal_margin(self) -> int:
+        return 24
 
     def _on_action_clicked(
         self, _button: object, notification_id: int, action_key: str
