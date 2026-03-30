@@ -39,15 +39,67 @@ class _BaseGtkRenderer(NotificationRenderer):
     _DEFAULT_TIMEOUT_MS = 5000
 
     def __init__(self) -> None:
-        super().__init__()
+        import gi
 
-    def close(self, notification_id: int) -> None:
-        self._GLib.idle_add(
-            self._destroy_window,
-            notification_id,
-            True,
-            CLOSE_REASON_DISMISSED,
-        )
+        gtk_major = 3
+        try:
+            gi.require_version("Gtk", "3.0")
+        except ValueError:
+            gi.require_version("Gtk", "4.0")
+            gtk_major = 4
+
+        from gi.repository import Gtk, Gdk, GLib
+
+        layer_shell = None
+        if gtk_major == 3:
+            for version in ("0.1", "0"):
+                try:
+                    gi.require_version("GtkLayerShell", version)
+                    from gi.repository import GtkLayerShell
+
+                    layer_shell = GtkLayerShell
+                    break
+                except ValueError:
+                    continue
+        else:
+            for version in ("1.0", "0"):
+                try:
+                    gi.require_version("Gtk4LayerShell", version)
+                    from gi.repository import Gtk4LayerShell
+
+                    layer_shell = Gtk4LayerShell
+                    break
+                except ValueError:
+                    continue
+
+        self._Gtk = Gtk
+        self._Gdk = Gdk
+        self._GLib = GLib
+        self._gtk_major = gtk_major
+        self._GtkLayerShell = layer_shell
+        self._main_loop = None
+
+        if self._GtkLayerShell is None:
+            print(
+                "[custom-notification-daemon] Running without GtkLayerShell. "
+                "Notifications will be regular windows. "
+                "Install: gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 "
+                "libgtk-layer-shell0",
+                file=sys.stderr,
+            )
+
+        self._windows: dict[int, Any] = {}
+        self._lock = threading.Lock()
+        self._on_action: Callable[[int, str], None] = lambda _id, _key: None
+        self._on_closed: Callable[[int, int], None] = lambda _id, _reason: None
+        self._timeout_sources: dict[int, int] = {}
+
+        if self._gtk_major == 3:
+            gtk_thread = threading.Thread(target=Gtk.main, daemon=True)
+        else:
+            self._main_loop = GLib.MainLoop()
+            gtk_thread = threading.Thread(target=self._main_loop.run, daemon=True)
+        gtk_thread.start()
 
     def set_handlers(
         self,
@@ -56,6 +108,14 @@ class _BaseGtkRenderer(NotificationRenderer):
     ) -> None:
         self._on_action = on_action
         self._on_closed = on_closed
+
+    def close(self, notification_id: int) -> None:
+        self._GLib.idle_add(
+            self._destroy_window,
+            notification_id,
+            False,
+            CLOSE_REASON_DISMISSED,
+        )
 
     def _destroy_window(
         self,
@@ -120,7 +180,7 @@ class _BaseGtkRenderer(NotificationRenderer):
     ) -> None:
         self._destroy_window(notification_id, True, CLOSE_REASON_DISMISSED)
 
-class OverlayRenderer(_BaseGtkRenderer):
+class ToastRenderer(_BaseGtkRenderer):
     """Renderer that displays notifications in a top-right toast.
 
     Prefers layer-shell integration when available, but can fall back to a
@@ -291,26 +351,6 @@ class OverlayRenderer(_BaseGtkRenderer):
 
         return False  # don't repeat idle call
 
-    def _destroy_window(
-        self,
-        notification_id: int,
-        emit_closed: bool = False,
-        close_reason: int = 0,
-    ) -> bool:
-        with self._lock:
-            win = self._windows.pop(notification_id, None)
-            timeout_source = self._timeout_sources.pop(notification_id, None)
-
-        if win is not None:
-            # Cancel pending timeout if window is being destroyed early
-            if timeout_source is not None:
-                self._GLib.source_remove(timeout_source)
-            win.destroy()
-            if emit_closed:
-                self._on_closed(notification_id, close_reason)
-
-        return False  # don't repeat timeout/idle call
-
     @staticmethod
     def _parse_actions(actions: list[str]) -> list[tuple[str, str]]:
         """Parse actions list into (key, label) tuples."""
@@ -373,15 +413,6 @@ class BannerRenderer(_BaseGtkRenderer):
 
     def show(self, notification: Notification) -> None:
         self._GLib.idle_add(self._create_window, notification)
-
-    def close(self, notification_id: int) -> None:
-        """Close a notification programmatically."""
-        self._GLib.idle_add(
-            self._destroy_window,
-            notification_id,
-            True,
-            CLOSE_REASON_DISMISSED,
-        )
 
     def set_handlers(
         self,
@@ -547,7 +578,7 @@ class BannerRenderer(_BaseGtkRenderer):
             return 1600
 
         geometry = monitor.get_geometry()
-        return max(800, geometry.width)
+        return min(geometry.width, 1600)
 
     def _banner_top_margin(self, gdk_module: Any) -> int:
         monitor = self._get_primary_monitor(gdk_module)

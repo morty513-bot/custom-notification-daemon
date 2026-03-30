@@ -67,7 +67,7 @@ python main.py run
 Renderer options:
 
 ```bash
-python main.py run --renderer overlay
+python main.py run --renderer toast
 python main.py run --renderer banner
 ```
 
