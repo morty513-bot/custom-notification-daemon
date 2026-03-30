@@ -101,14 +101,6 @@ class _BaseGtkRenderer(NotificationRenderer):
             gtk_thread = threading.Thread(target=self._main_loop.run, daemon=True)
         gtk_thread.start()
 
-    def set_handlers(
-        self,
-        on_action: Callable[[int, str], None],
-        on_closed: Callable[[int, int], None],
-    ) -> None:
-        self._on_action = on_action
-        self._on_closed = on_closed
-
     def show(self, notification: Notification) -> None:
         self._GLib.idle_add(self._create_window, notification)
 
@@ -124,6 +116,14 @@ class _BaseGtkRenderer(NotificationRenderer):
             False,
             CLOSE_REASON_DISMISSED,
         )
+
+    def set_handlers(
+        self,
+        on_action: Callable[[int, str], None],
+        on_closed: Callable[[int, int], None],
+    ) -> None:
+        self._on_action = on_action
+        self._on_closed = on_closed
 
     def _destroy_window(
         self,
