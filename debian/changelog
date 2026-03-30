@@ -1,4 +1,4 @@
-custom-notification-daemon (0.1.0) unstable; urgency=medium
+custom-notification-daemon (0.2.0) unstable; urgency=medium
 
   * Initial Debian packaging.
 

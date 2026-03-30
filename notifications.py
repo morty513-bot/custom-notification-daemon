@@ -73,7 +73,7 @@ class NotificationDaemon(ABC):
 
     def get_server_information(self) -> tuple[str, str, str, str]:
         """Return (name, vendor, version, spec_version)."""
-        return ("notify-daemon", "local", "0.1", "1.2")
+        return ("notify-daemon", "local", "0.2", "1.2")
 
     @abstractmethod
     def on_notify(self, notification: Notification) -> None:

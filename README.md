@@ -102,12 +102,12 @@ The helper script also validates that `main.py` version and
 
 This produces a package file in the parent directory, for example:
 
-`../custom-notification-daemon_0.1.0_all.deb`
+`../custom-notification-daemon_0.2.0_all.deb`
 
 ### 3. Install the package
 
 ```bash
-sudo apt install ../custom-notification-daemon_0.1.0_all.deb
+sudo apt install ../custom-notification-daemon_0.2.0_all.deb
 ```
 
 The package installs:

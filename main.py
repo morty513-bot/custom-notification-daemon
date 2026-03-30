@@ -9,7 +9,7 @@ from notifications import Notification, NotificationDaemon, run_daemon
 from renderer import BannerRenderer, OverlayRenderer, NotificationRenderer
 
 
-VERSION: Final[str] = "0.1.0"
+VERSION: Final[str] = "0.2.0"
 
 
 class RendererNotificationDaemon(NotificationDaemon):
