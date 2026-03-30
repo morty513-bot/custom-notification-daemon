@@ -216,6 +216,13 @@ class _BaseGtkRenderer(NotificationRenderer):
             if monitor is not None:
                 return monitor
 
+        if hasattr(display, "get_n_monitors") and hasattr(display, "get_monitor"):
+            n_monitors = display.get_n_monitors()
+            if n_monitors > 0:
+                monitor = display.get_monitor(0)
+                if monitor is not None:
+                    return monitor
+
         if hasattr(display, "get_monitors"):
             monitors = display.get_monitors()
             if monitors and monitors.get_n_items() > 0:
@@ -407,6 +414,7 @@ class BannerRenderer(_BaseGtkRenderer):
     _DEFAULT_TIMEOUT_MS = 5000
     _BANNER_HEIGHT = 112
     _BANNER_MARGIN = 0
+    _BANNER_OPACITY = 0.88
 
     def __init__(self) -> None:
         super().__init__()
@@ -438,6 +446,8 @@ class BannerRenderer(_BaseGtkRenderer):
 
         win.set_decorated(False)
         win.set_resizable(False)
+        if hasattr(win, "set_opacity"):
+            win.set_opacity(self._BANNER_OPACITY)
         if hasattr(win, "set_keep_above"):
             win.set_keep_above(True)
         if hasattr(win, "set_accept_focus"):
@@ -467,6 +477,7 @@ class BannerRenderer(_BaseGtkRenderer):
 
             # Position as a full-width centered banner across the middle.
             GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.TOP, True)
+            GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.BOTTOM, False)
             GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.LEFT, True)
             GtkLayerShell.set_anchor(win, GtkLayerShell.Edge.RIGHT, True)
             if hasattr(GtkLayerShell, "set_margin"):
@@ -494,6 +505,9 @@ class BannerRenderer(_BaseGtkRenderer):
             # A zero exclusive-zone draws over existing windows instead of
             # reserving workspace space from the compositor.
             GtkLayerShell.set_exclusive_zone(win, 0)
+        else:
+            # Best-effort centering when layer-shell bindings are unavailable.
+            self._position_fallback_window_center(win, Gdk)
 
         # Build UI
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -506,7 +520,7 @@ class BannerRenderer(_BaseGtkRenderer):
 
         if notification.app_name:
             app_lbl = Gtk.Label(label=notification.app_name)
-            app_lbl.set_xalign(0.5)
+            self._center_label(Gtk, app_lbl)
             app_lbl.get_style_context().add_class("dim-label")
             self._box_add(outer, app_lbl)
 
@@ -515,14 +529,14 @@ class BannerRenderer(_BaseGtkRenderer):
             summary_lbl.set_markup(
                 f"<b>{GLib.markup_escape_text(notification.summary)}</b>"
             )
-            summary_lbl.set_xalign(0.5)
+            self._center_label(Gtk, summary_lbl)
             self._set_label_wrap(summary_lbl, True)
             summary_lbl.set_max_width_chars(140)
             self._box_add(outer, summary_lbl)
 
         if notification.body:
             body_lbl = Gtk.Label(label=notification.body)
-            body_lbl.set_xalign(0.5)
+            self._center_label(Gtk, body_lbl)
             self._set_label_wrap(body_lbl, True)
             body_lbl.set_max_width_chars(140)
             self._box_add(outer, body_lbl)
@@ -590,3 +604,24 @@ class BannerRenderer(_BaseGtkRenderer):
 
     def _banner_horizontal_margin(self) -> int:
         return 24
+
+    def _position_fallback_window_center(self, win: Any, gdk_module: Any) -> None:
+        if not hasattr(win, "move"):
+            return
+
+        monitor = self._get_primary_monitor(gdk_module)
+        if monitor is None or not hasattr(monitor, "get_geometry"):
+            return
+
+        geometry = monitor.get_geometry()
+        banner_width = self._banner_width(gdk_module)
+        center_x = max(0, geometry.x + (geometry.width - banner_width) // 2)
+        center_y = max(0, geometry.y + (geometry.height - self._BANNER_HEIGHT) // 2)
+        win.move(center_x, center_y)
+
+    def _center_label(self, gtk_module: Any, label: Any) -> None:
+        label.set_xalign(0.5)
+        if hasattr(gtk_module, "Justification") and hasattr(label, "set_justify"):
+            label.set_justify(gtk_module.Justification.CENTER)
+        if hasattr(gtk_module, "Align") and hasattr(label, "set_halign"):
+            label.set_halign(gtk_module.Align.CENTER)
